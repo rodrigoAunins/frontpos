@@ -1,0 +1,140 @@
+/* src/App.css */
+
+/* Google Fonts si deseas usar Poppins (opcional):
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+*/
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background: #f4f7fc;
+  margin: 0;
+  padding: 0;
+}
+
+.btn,
+input,
+select,
+textarea {
+  font-size: 1rem;
+}
+
+.card .card-body h6 {
+  font-size: 1rem;
+}
+
+/* Navbar */
+.navbar {
+  background: #2c3e50;
+}
+
+.navbar-brand,
+.navbar-text,
+.nav-link,
+.navbar-toggler-icon {
+  color: #ecf0f1 !important;
+}
+
+.nav-link:hover {
+  color: #bdc3c7 !important;
+}
+
+/* Botones */
+.btn-custom {
+  border-radius: 25px;
+  padding: 0.6rem 1.2rem;
+}
+
+/* Tarjetas */
+.card {
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 20px;
+}
+
+.card-img-top {
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  height: 180px;
+  object-fit: cover;
+}
+
+.category-card,
+.product-card,
+.brand-card {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.category-card:hover,
+.product-card:hover,
+.brand-card:hover {
+  transform: scale(1.03);
+}
+
+/* Resumen de venta */
+#saleSummary {
+  background: #ecf0f1;
+  padding: 15px;
+  border-radius: 10px;
+}
+
+/* Tablas */
+table th,
+table td {
+  vertical-align: middle !important;
+}
+
+/* Secciones de reportes */
+.report-section {
+  background: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 20px;
+}
+
+/* Modals */
+.custom-modal .modal-content {
+  border-radius: 10px;
+}
+
+/* Ocultar contenedor de cámara por defecto (si lo usas) */
+#cameraScannerContainer {
+  display: none;
+}
+
+/* Numeric Keypad */
+#numericKeypad {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: #f8f9fa;
+  border-top: 2px solid #ccc;
+  padding: 10px;
+}
+
+#numericKeypad .key-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 5px;
+}
+
+#numericKeypad button {
+  width: 60px;
+  height: 60px;
+  margin: 5px;
+  font-size: 1.2rem;
+}
+
+/* Login form */
+#loginPage {
+  max-width: 400px;
+  margin: 80px auto;
+  background: #fff;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
