@@ -1,6 +1,6 @@
 // src/App.js
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { restoreSessionFromLocalStorage, storeSessionToLocalStorage } from './services/api';
 
 // Importar las páginas
@@ -23,15 +23,13 @@ function App() {
   };
 
   const handleLogout = () => {
-    // El cierre de sesión se maneja dentro de Dashboard también,
-    // pero dejamos esta función si quieres invocarla directamente.
     setCurrentUser(null);
     setCurrentSession(null);
     storeSessionToLocalStorage(null, null);
   };
 
   return (
-    <BrowserRouter>
+-   <BrowserRouter>
       <Routes>
         {/* Ruta de Login */}
         <Route
@@ -57,7 +55,7 @@ function App() {
           }
         />
       </Routes>
-    </BrowserRouter>
+-   </BrowserRouter>
   );
 }
 
