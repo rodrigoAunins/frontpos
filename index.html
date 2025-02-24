@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+  <meta http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        connect-src 'self' https://posback-production.up.railway.app;
+        script-src 'self' 'unsafe-inline' https://unpkg.com https://code.jquery.com https://stackpath.bootstrapcdn.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;
+        style-src 'self' 'unsafe-inline' https://stackpath.bootstrapcdn.com https://fonts.googleapis.com https://cdnjs.cloudflare.com;
+        font-src 'self' data: https://fonts.gstatic.com;
+        img-src 'self' data: https://*;
+        object-src 'none';
+        form-action 'self';
+      ">
+
   <meta charset="UTF-8">
   <title>Sistema de Ventas - Maquillaje</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -183,6 +195,14 @@
                 <input type="text" id="editProductBarcode" class="form-control">
               </div>
             </div>
+
+            <!-- Variante de colores -->
+            <div class="form-group">
+              <label>Variantes (Color/Stock separado). Formato: <em>Color|Stock</em> (uno por línea)</label>
+              <textarea id="editProductVariants" class="form-control" placeholder="Ej: Rojo|10&#10;Verde|20"></textarea>
+              <small>Si no deseas manejar variantes, deja este campo vacío.</small>
+            </div>
+
             <div class="form-group">
               <label>Imagen</label>
               <input type="file" id="editProductImage" accept="image/*" class="form-control-file">
@@ -339,10 +359,89 @@
   let html5QrcodeScanner = null;
   let cameraIsActive = false;
 
+  // Variables para paginación
+  let categoriesPage = 0; 
+  let brandsPage = 0;
+  let productsPage = 0;
+  let usersPage = 0; 
+  let CATEGORIES_LIMIT = 10;
+  let BRANDS_LIMIT = 10;
+  let PRODUCTS_LIMIT = 10;
+  let USERS_LIMIT = 10;
+
   // Ajusta al dominio de tu backend
   const BACKEND_URL = "https://posback-production.up.railway.app";
 
+  /******************************************************
+   *           Conversión a WebP (Front-End)
+   ******************************************************/
+  async function convertToWebp(base64Data) {
+    // Retorna una Promesa con la imagen en base64 (WebP)
+    return new Promise((resolve, reject) => {
+      let img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = function() {
+        let canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        let ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        // calidad 0.8
+        let webpData = canvas.toDataURL('image/webp', 0.8);
+        resolve(webpData);
+      };
+      img.onerror = function(err) {
+        reject(err);
+      };
+      img.src = base64Data;
+    });
+  }
+
+  /******************************************************
+   *           Manejo de LocalStorage de sesión
+   ******************************************************/
+  function storeSessionToLocalStorage() {
+    if (currentUser) {
+      localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('currentUser');
+    }
+    // Guardar también la caja actual
+    if (currentSession) {
+      localStorage.setItem('currentSession', JSON.stringify(currentSession));
+    } else {
+      localStorage.removeItem('currentSession');
+    }
+  }
+
+  function restoreSessionFromLocalStorage() {
+    const lsUser = localStorage.getItem('currentUser');
+    if (lsUser) {
+      currentUser = JSON.parse(lsUser);
+    }
+    const lsSession = localStorage.getItem('currentSession');
+    if (lsSession) {
+      currentSession = JSON.parse(lsSession);
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    // Restauramos usuario y sesión
+    restoreSessionFromLocalStorage();
+
+    // Si hay currentUser, saltamos login
+    if (currentUser) {
+      document.getElementById("loginPage").style.display = "none";
+      document.getElementById("dashboard").style.display = "block";
+      document.getElementById("currentUser").textContent = currentUser.username + " (" + currentUser.role + ")";
+      loadMenu();
+      if (currentUser.role === "admin") {
+        loadPage("usuarios");
+      } else {
+        loadPage("caja");
+      }
+    }
+
     document.getElementById("loginForm").addEventListener("submit", login);
     document.getElementById("logoutBtn").addEventListener("click", logout);
     document.getElementById("confirmQuantityBtn").addEventListener("click", confirmAddProduct);
@@ -359,7 +458,6 @@
       }
     });
     document.addEventListener("keydown", globalKeyHandler);
-    // Nada de sync offline: se quita el setInterval de sincronización
   });
 
   /******************************************************
@@ -395,14 +493,19 @@
     const username = document.getElementById("loginUsername").value;
     const password = document.getElementById("loginPassword").value;
 
-    // Ejemplo naive: GET /users y filtramos
-    // En un sistema real deberías implementar un endpoint /login con tu lógica
     try {
+      // Para paginación o búsqueda, no es tan crítico aquí.
+      // Podríamos hacer /users?order=username:asc
       const resp = await fetch(`${BACKEND_URL}/users`);
       const users = await resp.json();
+      // ordena alfabéticamente
+      users.sort((a, b) => a.username.localeCompare(b.username));
+
       const user = users.find(u => u.username === username && u.password === password);
       if (user) {
         currentUser = user;
+        storeSessionToLocalStorage();
+
         document.getElementById("loginPage").style.display = "none";
         document.getElementById("dashboard").style.display = "block";
         document.getElementById("currentUser").textContent = user.username + " (" + user.role + ")";
@@ -430,6 +533,7 @@
     currentUser = null;
     currentSession = null;
     saleItems = [];
+    storeSessionToLocalStorage();
     document.getElementById("dashboard").style.display = "none";
     document.getElementById("loginPage").style.display = "block";
   }
@@ -509,7 +613,11 @@
           <tr><th>ID</th><th>Usuario</th><th>Rol</th><th>Acciones</th></tr>
         </thead>
         <tbody id="usersTableBody"></tbody>
-      </table>`;
+      </table>
+      <div class="d-flex justify-content-between">
+        <button class="btn btn-secondary btn-sm" id="usersPrevBtn">Anterior</button>
+        <button class="btn btn-secondary btn-sm" id="usersNextBtn">Siguiente</button>
+      </div>`;
 
     document.getElementById("userForm").addEventListener("submit", async function(e) {
       e.preventDefault();
@@ -523,19 +631,36 @@
           body: JSON.stringify({ username, password, role })
         });
         this.reset();
+        usersPage = 0; // Volver a pagina 0
         loadUsuariosTable();
       } catch (error) {
         console.error("Error creando usuario:", error);
         alert("Error creando usuario.");
       }
     });
+
+    document.getElementById("usersPrevBtn").addEventListener("click", () => {
+      if (usersPage > 0) {
+        usersPage--;
+        loadUsuariosTable();
+      }
+    });
+    document.getElementById("usersNextBtn").addEventListener("click", () => {
+      usersPage++;
+      loadUsuariosTable();
+    });
+
     loadUsuariosTable();
   }
 
   async function loadUsuariosTable() {
     const tbody = document.getElementById("usersTableBody");
     try {
-      const resp = await fetch(`${BACKEND_URL}/users`);
+      // ?limit & offset & order
+      const limit = USERS_LIMIT;
+      const offset = usersPage * USERS_LIMIT;
+      // Ajustamos la URL si el backend maneja ?limit &offset &order=...
+      const resp = await fetch(`${BACKEND_URL}/users?limit=${limit}&offset=${offset}&order=username:asc`);
       const users = await resp.json();
       tbody.innerHTML = "";
       users.forEach(u => {
@@ -551,6 +676,10 @@
             </td>
           </tr>`;
       });
+      if (users.length === 0 && usersPage > 0) {
+        // Si no hay datos y no estamos en la primera página, retroceder
+        usersPage--;
+      }
     } catch (error) {
       console.error("Error cargando usuarios:", error);
       tbody.innerHTML = "<tr><td colspan='4'>No se pudo cargar usuarios</td></tr>";
@@ -587,7 +716,11 @@
         <button type="submit" class="btn btn-success btn-custom">Agregar Categoría</button>
       </form>
       <h4>Categorías</h4>
-      <div class="row" id="categoriesList"></div>`;
+      <div class="row" id="categoriesList"></div>
+      <div class="d-flex justify-content-between">
+        <button class="btn btn-secondary btn-sm" id="catPrevBtn">Anterior</button>
+        <button class="btn btn-secondary btn-sm" id="catNextBtn">Siguiente</button>
+      </div>`;
 
     document.getElementById("categoryForm").addEventListener("submit", async function(e) {
       e.preventDefault();
@@ -597,14 +730,16 @@
       if (file) {
         const reader = new FileReader();
         reader.onload = async function(ev) {
-          const imageData = ev.target.result;
           try {
+            const base64 = ev.target.result;
+            const webpData = await convertToWebp(base64); // Conversión a WebP
             await fetch(`${BACKEND_URL}/categories`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name, image: imageData })
+              body: JSON.stringify({ name, image: webpData })
             });
             document.getElementById("categoryForm").reset();
+            categoriesPage = 0;
             loadCategoriesList();
           } catch (error) {
             console.error("Error creando categoría:", error);
@@ -615,6 +750,17 @@
       }
     });
 
+    document.getElementById("catPrevBtn").addEventListener("click", () => {
+      if (categoriesPage > 0) {
+        categoriesPage--;
+        loadCategoriesList();
+      }
+    });
+    document.getElementById("catNextBtn").addEventListener("click", () => {
+      categoriesPage++;
+      loadCategoriesList();
+    });
+
     loadCategoriesList();
   }
 
@@ -622,9 +768,16 @@
     const list = document.getElementById("categoriesList");
     list.innerHTML = "";
     try {
-      const resp = await fetch(`${BACKEND_URL}/categories`);
+      const limit = CATEGORIES_LIMIT;
+      const offset = categoriesPage * CATEGORIES_LIMIT;
+      // order=name:asc
+      const resp = await fetch(`${BACKEND_URL}/categories?limit=${limit}&offset=${offset}&order=name:asc`);
       const categories = await resp.json();
       if (categories.length === 0) {
+        if (categoriesPage > 0) {
+          categoriesPage--;
+          return loadCategoriesList();
+        }
         list.innerHTML = '<div class="col-12 text-center text-muted">No hay categorías registradas.</div>';
         return;
       }
@@ -653,7 +806,9 @@
 
   window.editCategory = async function(id) {
     try {
-      const resp = await fetch(`${BACKEND_URL}/categories`);
+      // Podríamos traer una sola categoría, pero mantenemos la lógica simple
+      const limit = CATEGORIES_LIMIT*(categoriesPage+1);
+      const resp = await fetch(`${BACKEND_URL}/categories?limit=${limit}&offset=0&order=name:asc`);
       const categories = await resp.json();
       const cat = categories.find(c => c.id == id);
       if (!cat) return;
@@ -687,15 +842,15 @@
     const name = document.getElementById("editCategoryName").value;
     const fileInput = document.getElementById("editCategoryImage");
     try {
-      let imageData = null;
       if (fileInput.files && fileInput.files[0]) {
         const reader = new FileReader();
         reader.onload = async function(ev) {
-          imageData = ev.target.result;
+          const base64 = ev.target.result;
+          const webpData = await convertToWebp(base64); 
           await fetch(`${BACKEND_URL}/categories/${id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, image: imageData })
+            body: JSON.stringify({ name, image: webpData })
           });
           $("#editCategoryModal").modal("hide");
           loadCategoriesList();
@@ -739,7 +894,11 @@
         <button type="submit" class="btn btn-success btn-custom">Agregar Marca</button>
       </form>
       <h4>Marcas</h4>
-      <div class="row" id="brandsList"></div>`;
+      <div class="row" id="brandsList"></div>
+      <div class="d-flex justify-content-between">
+        <button class="btn btn-secondary btn-sm" id="brandsPrevBtn">Anterior</button>
+        <button class="btn btn-secondary btn-sm" id="brandsNextBtn">Siguiente</button>
+      </div>`;
 
     document.getElementById("brandForm").addEventListener("submit", async function(e) {
       e.preventDefault();
@@ -750,14 +909,16 @@
       if (file) {
         const reader = new FileReader();
         reader.onload = async function(ev) {
-          const imageData = ev.target.result;
           try {
+            const base64 = ev.target.result;
+            const webpData = await convertToWebp(base64);
             await fetch(`${BACKEND_URL}/brands`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name, categoryId, image: imageData })
+              body: JSON.stringify({ name, categoryId, image: webpData })
             });
             document.getElementById("brandForm").reset();
+            brandsPage = 0;
             loadBrandsList();
           } catch (error) {
             console.error("Error creando marca:", error);
@@ -768,6 +929,17 @@
       }
     });
 
+    document.getElementById("brandsPrevBtn").addEventListener("click", () => {
+      if (brandsPage > 0) {
+        brandsPage--;
+        loadBrandsList();
+      }
+    });
+    document.getElementById("brandsNextBtn").addEventListener("click", () => {
+      brandsPage++;
+      loadBrandsList();
+    });
+
     loadBrandCategoryDropdown();
     loadBrandsList();
   }
@@ -776,7 +948,7 @@
     const select = document.getElementById("brandCategory");
     select.innerHTML = "";
     try {
-      const resp = await fetch(`${BACKEND_URL}/categories`);
+      const resp = await fetch(`${BACKEND_URL}/categories?limit=1000&offset=0&order=name:asc`);
       const categories = await resp.json();
       if (categories.length === 0) {
         select.innerHTML = "<option value=''>No hay categorías</option>";
@@ -796,14 +968,20 @@
     if (!list) return;
     list.innerHTML = "";
     try {
-      const resp = await fetch(`${BACKEND_URL}/brands`);
+      const limit = BRANDS_LIMIT;
+      const offset = brandsPage * BRANDS_LIMIT;
+      const resp = await fetch(`${BACKEND_URL}/brands?limit=${limit}&offset=${offset}&order=name:asc`);
       const brands = await resp.json();
       if (brands.length === 0) {
+        if (brandsPage > 0) {
+          brandsPage--;
+          return loadBrandsList();
+        }
         list.innerHTML = '<div class="col-12 text-center text-muted">No hay marcas registradas.</div>';
         return;
       }
       // También necesitamos las categorías para mostrar el nombre
-      const catResp = await fetch(`${BACKEND_URL}/categories`);
+      const catResp = await fetch(`${BACKEND_URL}/categories?limit=1000&offset=0&order=name:asc`);
       const categories = await catResp.json();
 
       brands.forEach(brand => {
@@ -834,7 +1012,8 @@
 
   window.editBrand = async function(id) {
     try {
-      const resp = await fetch(`${BACKEND_URL}/brands`);
+      // para paginación, traemos un lote más grande
+      const resp = await fetch(`${BACKEND_URL}/brands?limit=99999&offset=0&order=name:asc`);
       const brands = await resp.json();
       const brand = brands.find(b => b.id == id);
       if (!brand) return;
@@ -842,7 +1021,7 @@
       document.getElementById("editBrandName").value = brand.name;
 
       // Cargar categorías
-      const catResp = await fetch(`${BACKEND_URL}/categories`);
+      const catResp = await fetch(`${BACKEND_URL}/categories?limit=1000&offset=0&order=name:asc`);
       const categories = await catResp.json();
       const select = document.getElementById("editBrandCategory");
       select.innerHTML = "";
@@ -881,11 +1060,12 @@
       if (fileInput.files && fileInput.files[0]) {
         const reader = new FileReader();
         reader.onload = async function(ev) {
-          const imageData = ev.target.result;
+          const base64 = ev.target.result;
+          const webpData = await convertToWebp(base64);
           await fetch(`${BACKEND_URL}/brands/${id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, categoryId, image: imageData })
+            body: JSON.stringify({ name, categoryId, image: webpData })
           });
           $("#editBrandModal").modal("hide");
           loadBrandsList();
@@ -928,7 +1108,7 @@
             <input type="number" id="productPrice" class="form-control" required>
           </div>
           <div class="form-group col-md-3">
-            <label>Stock</label>
+            <label>Stock (si no hay variantes)</label>
             <input type="number" id="productStock" class="form-control" required>
           </div>
           <div class="form-group col-md-3">
@@ -950,6 +1130,11 @@
             <input type="file" id="productImage" accept="image/*" class="form-control-file" required>
           </div>
         </div>
+        <!-- Manejo de variantes (colores) -->
+        <div class="form-group">
+          <label>Variantes (opcional). Formato: <em>Color|Stock</em> (uno por línea)</label>
+          <textarea id="productVariants" class="form-control" placeholder="Ej: Rojo|10&#10;Verde|20"></textarea>
+        </div>
         <button type="submit" class="btn btn-success btn-custom">Agregar Producto</button>
       </form>
       <h4>Productos</h4>
@@ -962,13 +1147,18 @@
             <th>Marca</th>
             <th>Precio</th>
             <th>Stock</th>
+            <th>Variantes</th>
             <th>Código de Barras</th>
             <th>Imagen</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody id="productsTableBody"></tbody>
-      </table>`;
+      </table>
+      <div class="d-flex justify-content-between">
+        <button class="btn btn-secondary btn-sm" id="prodPrevBtn">Anterior</button>
+        <button class="btn btn-secondary btn-sm" id="prodNextBtn">Siguiente</button>
+      </div>`;
 
     // Carga de combos
     loadProductCategoryDropdown();
@@ -984,19 +1174,43 @@
       const categoryId = document.getElementById("productCategory").value.trim();
       const brandId = document.getElementById("productBrand").value.trim();
       const barcode = document.getElementById("productBarcode").value.trim();
+      const variantsRaw = document.getElementById("productVariants").value.trim();
+      let variants = [];
+      if (variantsRaw) {
+        variants = variantsRaw.split("\n").map(line => {
+          const parts = line.split("|");
+          return {
+            color: parts[0] ? parts[0].trim() : "",
+            stock: parts[1] ? parseInt(parts[1].trim()) : 0
+          };
+        });
+      }
+
       const fileInput = document.getElementById("productImage");
       const file = fileInput.files[0];
       if (file) {
         const reader = new FileReader();
         reader.onload = async function(ev) {
-          const imageData = ev.target.result;
+          const base64 = ev.target.result;
           try {
+            const webpData = await convertToWebp(base64);
             await fetch(`${BACKEND_URL}/products`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name, description, price, stock, categoryId, brandId, barcode, image: imageData })
+              body: JSON.stringify({ 
+                name, 
+                description, 
+                price, 
+                stock, 
+                categoryId, 
+                brandId, 
+                barcode, 
+                image: webpData,
+                variants 
+              })
             });
             document.getElementById("productForm").reset();
+            productsPage = 0;
             loadProductsTable();
           } catch (error) {
             console.error("Error creando producto:", error);
@@ -1007,6 +1221,17 @@
       }
     });
 
+    document.getElementById("prodPrevBtn").addEventListener("click", () => {
+      if (productsPage > 0) {
+        productsPage--;
+        loadProductsTable();
+      }
+    });
+    document.getElementById("prodNextBtn").addEventListener("click", () => {
+      productsPage++;
+      loadProductsTable();
+    });
+
     loadProductsTable();
   }
 
@@ -1014,7 +1239,7 @@
     const productCategorySelect = document.getElementById("productCategory");
     productCategorySelect.innerHTML = "";
     try {
-      const resp = await fetch(`${BACKEND_URL}/categories`);
+      const resp = await fetch(`${BACKEND_URL}/categories?limit=1000&offset=0&order=name:asc`);
       const categories = await resp.json();
       if (categories.length === 0) {
         productCategorySelect.innerHTML = "<option value=''>No hay categorías</option>";
@@ -1039,7 +1264,7 @@
       return;
     }
     try {
-      const resp = await fetch(`${BACKEND_URL}/brands`);
+      const resp = await fetch(`${BACKEND_URL}/brands?limit=1000&offset=0&order=name:asc`);
       const allBrands = await resp.json();
       const filteredBrands = allBrands.filter(b => b.categoryId == categorySelected);
       if (filteredBrands.length === 0) {
@@ -1059,16 +1284,27 @@
     const tbody = document.getElementById("productsTableBody");
     tbody.innerHTML = "";
     try {
-      const resp = await fetch(`${BACKEND_URL}/products`);
+      const limit = PRODUCTS_LIMIT;
+      const offset = productsPage * PRODUCTS_LIMIT;
+      const resp = await fetch(`${BACKEND_URL}/products?limit=${limit}&offset=${offset}&order=name:asc`);
       const products = await resp.json();
-      const catResp = await fetch(`${BACKEND_URL}/categories`);
+      const catResp = await fetch(`${BACKEND_URL}/categories?limit=1000&offset=0&order=name:asc`);
       const categories = await catResp.json();
-      const brResp = await fetch(`${BACKEND_URL}/brands`);
+      const brResp = await fetch(`${BACKEND_URL}/brands?limit=1000&offset=0&order=name:asc`);
       const brands = await brResp.json();
+
+      if (products.length === 0 && productsPage > 0) {
+        productsPage--;
+        return loadProductsTable();
+      }
 
       products.forEach(prod => {
         const category = categories.find(c => c.id == prod.categoryId);
         const brand = brands.find(br => br.id == prod.brandId);
+        let variantsText = "";
+        if (prod.variants && Array.isArray(prod.variants) && prod.variants.length > 0) {
+          variantsText = prod.variants.map(v => `${v.color}(${v.stock})`).join(", ");
+        }
         tbody.innerHTML += `
           <tr>
             <td>${prod.id}</td>
@@ -1077,6 +1313,7 @@
             <td>${brand ? brand.name : ''}</td>
             <td>$${prod.price}</td>
             <td>${prod.stock}</td>
+            <td>${variantsText}</td>
             <td>${prod.barcode || ''}</td>
             <td><img src="${prod.image}" alt="${prod.name}" style="width:50px;height:50px;object-fit:cover;"></td>
             <td>
@@ -1091,7 +1328,7 @@
       });
     } catch (error) {
       console.error("Error cargando productos:", error);
-      tbody.innerHTML = "<tr><td colspan='9'>No se pudo cargar productos</td></tr>";
+      tbody.innerHTML = "<tr><td colspan='10'>No se pudo cargar productos</td></tr>";
     }
   }
 
@@ -1109,7 +1346,7 @@
   window.editProduct = async function(id) {
     try {
       // Obtener producto
-      const resp = await fetch(`${BACKEND_URL}/products`);
+      const resp = await fetch(`${BACKEND_URL}/products?limit=99999&offset=0&order=name:asc`);
       const products = await resp.json();
       const prod = products.find(p => p.id == id);
       if (!prod) return;
@@ -1121,6 +1358,15 @@
       document.getElementById("editProductPrice").value = prod.price;
       document.getElementById("editProductStock").value = prod.stock;
       document.getElementById("editProductBarcode").value = prod.barcode || "";
+
+      // Variantes
+      if (prod.variants && Array.isArray(prod.variants) && prod.variants.length > 0) {
+        const variantsText = prod.variants.map(v => `${v.color}|${v.stock}`).join("\n");
+        document.getElementById("editProductVariants").value = variantsText;
+      } else {
+        document.getElementById("editProductVariants").value = "";
+      }
+
       if (prod.image) {
         document.getElementById("currentProductImage").innerHTML = `<img src="${prod.image}" alt="${prod.name}" style="width:100px;height:100px;object-fit:cover;">`;
       } else {
@@ -1128,7 +1374,7 @@
       }
 
       // Cargar categorías
-      const catResp = await fetch(`${BACKEND_URL}/categories`);
+      const catResp = await fetch(`${BACKEND_URL}/categories?limit=1000&offset=0&order=name:asc`);
       const categories = await catResp.json();
       const selectCat = document.getElementById("editProductCategory");
       selectCat.innerHTML = categories.map(c =>
@@ -1136,7 +1382,7 @@
       ).join("");
 
       // Cargar marcas
-      const brResp = await fetch(`${BACKEND_URL}/brands`);
+      const brResp = await fetch(`${BACKEND_URL}/brands?limit=1000&offset=0&order=name:asc`);
       const brandOptions = await brResp.json();
       const filteredOptions = brandOptions.filter(b => b.categoryId == prod.categoryId);
       const selectBr = document.getElementById("editProductBrand");
@@ -1167,17 +1413,39 @@
     const categoryId = document.getElementById("editProductCategory").value.trim();
     const brandId = document.getElementById("editProductBrand").value.trim();
     const barcode = document.getElementById("editProductBarcode").value.trim();
+    const variantsRaw = document.getElementById("editProductVariants").value.trim();
+    let variants = [];
+    if (variantsRaw) {
+      variants = variantsRaw.split("\n").map(line => {
+        const parts = line.split("|");
+        return {
+          color: parts[0] ? parts[0].trim() : "",
+          stock: parts[1] ? parseInt(parts[1].trim()) : 0
+        };
+      });
+    }
 
     const fileInput = document.getElementById("editProductImage");
     try {
       if (fileInput.files && fileInput.files[0]) {
         const reader = new FileReader();
         reader.onload = async function(ev) {
-          const imageData = ev.target.result;
+          const base64 = ev.target.result;
+          const webpData = await convertToWebp(base64);
           await fetch(`${BACKEND_URL}/products/${id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, description, price, stock, categoryId, brandId, barcode, image: imageData })
+            body: JSON.stringify({ 
+              name, 
+              description, 
+              price, 
+              stock, 
+              categoryId, 
+              brandId, 
+              barcode,
+              image: webpData,
+              variants 
+            })
           });
           $("#editProductModal").modal("hide");
           loadProductsTable();
@@ -1187,7 +1455,16 @@
         await fetch(`${BACKEND_URL}/products/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, description, price, stock, categoryId, brandId, barcode })
+          body: JSON.stringify({ 
+            name, 
+            description, 
+            price, 
+            stock, 
+            categoryId, 
+            brandId, 
+            barcode,
+            variants
+          })
         });
         $("#editProductModal").modal("hide");
         loadProductsTable();
@@ -1236,15 +1513,15 @@
         startTime: new Date().toISOString(),
         initialAmount
       };
+      storeSessionToLocalStorage();
       updateCajaUI();
       if (currentUser.role === "cashier") { loadPage("ventas"); }
     });
     document.getElementById("closeCajaBtn").addEventListener("click", () => {
-      // En tu backend podrías guardar la sesión de caja si deseas
-      // Por ahora, la dejamos local
-      const totalSales = 0; // re-calcular si lo deseas
+      const totalSales = 0; // se podría calcular
       alert(`Caja cerrada. Total de ventas: $${totalSales.toFixed(2)}`);
       currentSession = null;
+      storeSessionToLocalStorage();
       updateCajaUI();
     });
     updateCajaUI();
@@ -1331,7 +1608,8 @@
     const saleCategories = document.getElementById("saleCategories");
     saleCategories.innerHTML = "";
     try {
-      const resp = await fetch(`${BACKEND_URL}/categories`);
+      // sin paginación en ventas, pero sí orden
+      const resp = await fetch(`${BACKEND_URL}/categories?limit=99999&offset=0&order=name:asc`);
       const categories = await resp.json();
       if (categories.length === 0) {
         saleCategories.innerHTML = '<div class="col-12 text-center text-muted">No hay categorías registradas.</div>';
@@ -1369,7 +1647,7 @@
     saleBrandsDiv.innerHTML = "";
     titleBrands.style.display = "block";
     try {
-      const resp = await fetch(`${BACKEND_URL}/brands`);
+      const resp = await fetch(`${BACKEND_URL}/brands?limit=99999&offset=0&order=name:asc`);
       const brands = await resp.json();
       const filtered = brands.filter(b => b.categoryId == categoryId);
       if (filtered.length === 0) {
@@ -1403,7 +1681,7 @@
     const saleProductsDiv = document.getElementById("saleProducts");
     saleProductsDiv.innerHTML = "";
     try {
-      const resp = await fetch(`${BACKEND_URL}/products`);
+      const resp = await fetch(`${BACKEND_URL}/products?limit=99999&offset=0&order=name:asc`);
       const products = await resp.json();
       const filtered = products.filter(p => p.brandId == brandId && p.stock > 0);
       if (filtered.length === 0) {
@@ -1430,7 +1708,7 @@
 
   window.openQuantityModal = async function(productId) {
     try {
-      const resp = await fetch(`${BACKEND_URL}/products`);
+      const resp = await fetch(`${BACKEND_URL}/products?limit=99999&offset=0&order=name:asc`);
       const products = await resp.json();
       selectedProduct = products.find(p => p.id == productId);
       if (selectedProduct) {
@@ -1619,13 +1897,9 @@
     const change = amountPaid - currentSaleTotal;
     const paymentMethod = document.getElementById("paymentMethod").value;
 
-    // Actualizamos stock en el backend y registramos la venta
-    // 1) Verificar stock en el backend (opcional). Aquí haremos:
-    //    - Disminuir stock
-    //    - Crear registro de venta
     try {
-      // 1. Verificar stock de cada producto
-      const productResp = await fetch(`${BACKEND_URL}/products`);
+      // Verificar stock en backend
+      const productResp = await fetch(`${BACKEND_URL}/products?limit=99999&offset=0&order=name:asc`);
       const allProducts = await productResp.json();
       for (let item of saleItems) {
         const found = allProducts.find(p => p.id == item.productId);
@@ -1634,7 +1908,7 @@
           return;
         }
       }
-      // 2. Actualizar stock de cada producto
+      // Actualizar stock de cada producto
       for (let item of saleItems) {
         const found = allProducts.find(p => p.id == item.productId);
         const newStock = found.stock - item.quantity;
@@ -1645,7 +1919,7 @@
         });
       }
 
-      // 3. Registrar venta
+      // Registrar venta
       const saleRecord = {
         date: new Date().toISOString(),
         cashierId: currentUser.id,
@@ -1752,7 +2026,7 @@
 
   async function loadCashiersForFilter() {
     try {
-      const resp = await fetch(`${BACKEND_URL}/users`);
+      const resp = await fetch(`${BACKEND_URL}/users?limit=99999&offset=0&order=username:asc`);
       const users = await resp.json();
       const cashierSelect = document.getElementById("cashierFilter");
       users
@@ -1772,7 +2046,6 @@
       const respSales = await fetch(`${BACKEND_URL}/sales`);
       let sales = await respSales.json();
       // Filtrar por fecha (date) => dateStr
-      // Asumiendo que sale.date es un ISO string, tomamos el substring
       sales = sales.filter(s => s.date.slice(0,10) === dateStr);
       // Filtrar por cajero
       if (cashierFilter !== "all") {
@@ -1780,7 +2053,7 @@
       }
 
       // 2) Cargar todos los usuarios (para nombre cajero)
-      const respUsers = await fetch(`${BACKEND_URL}/users`);
+      const respUsers = await fetch(`${BACKEND_URL}/users?limit=99999&offset=0&order=username:asc`);
       const users = await respUsers.json();
 
       // 3) Mostrar ventas
@@ -1829,15 +2102,14 @@
       }
       html += `</div>`;
 
-      // No hay ejemplo de "Balance de Caja" real en el backend, ni de "CashSessions" en la BD,
-      // así que lo omitimos o lo dejamos en blanco
+      // Balance de Caja (no implementado)
       html += `<div class="report-section">
                  <h4>Balance de Caja</h4>
                  <p>No hay información de caja en tiempo real.</p>
                </div>`;
 
       // 4) Stock actual
-      const respProds = await fetch(`${BACKEND_URL}/products`);
+      const respProds = await fetch(`${BACKEND_URL}/products?limit=99999&offset=0&order=name:asc`);
       const products = await respProds.json();
       html += `<div class="report-section">
                  <h4>Stock Actual</h4>
@@ -1863,7 +2135,6 @@
   }
 
   async function exportReportToExcel(dateStr, cashierFilter) {
-    // Se repite la lógica de arriba para traer la info
     try {
       const respSales = await fetch(`${BACKEND_URL}/sales`);
       let sales = await respSales.json();
@@ -1872,10 +2143,10 @@
         sales = sales.filter(s => s.cashierId == cashierFilter);
       }
 
-      const respUsers = await fetch(`${BACKEND_URL}/users`);
+      const respUsers = await fetch(`${BACKEND_URL}/users?limit=99999&offset=0&order=username:asc`);
       const users = await respUsers.json();
 
-      const respProducts = await fetch(`${BACKEND_URL}/products`);
+      const respProducts = await fetch(`${BACKEND_URL}/products?limit=99999&offset=0&order=name:asc`);
       const allProducts = await respProducts.json();
 
       // 1) Hoja de Ventas
@@ -1899,7 +2170,7 @@
         ]);
       });
 
-      // 2) Caja (no implementado, se haría otra hoja si tuvieras la info)
+      // 2) Caja (no implementado)
       const cajaData = [];
       cajaData.push(["(Sin datos de caja implementados)"]);
 
@@ -1969,7 +2240,7 @@
 
   async function findProductByBarcode(code) {
     try {
-      const resp = await fetch(`${BACKEND_URL}/products`);
+      const resp = await fetch(`${BACKEND_URL}/products?limit=99999&offset=0&order=name:asc`);
       const products = await resp.json();
       const match = products.find(p => p.barcode && p.barcode.trim() === code);
       if (!match) {
