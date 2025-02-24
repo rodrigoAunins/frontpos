@@ -1,18 +1,18 @@
 {
   "files": {
-    "main.css": "/frontpos/static/css/main.016fee05.css",
-    "main.js": "/frontpos/static/js/main.cc6e9bb7.js",
-    "static/js/239.98dd0108.chunk.js": "/frontpos/static/js/239.98dd0108.chunk.js",
-    "static/js/977.c979323d.chunk.js": "/frontpos/static/js/977.c979323d.chunk.js",
-    "static/js/732.970dbdbb.chunk.js": "/frontpos/static/js/732.970dbdbb.chunk.js",
-    "index.html": "/frontpos/index.html",
-    "main.016fee05.css.map": "/frontpos/static/css/main.016fee05.css.map",
-    "main.cc6e9bb7.js.map": "/frontpos/static/js/main.cc6e9bb7.js.map",
-    "239.98dd0108.chunk.js.map": "/frontpos/static/js/239.98dd0108.chunk.js.map",
-    "732.970dbdbb.chunk.js.map": "/frontpos/static/js/732.970dbdbb.chunk.js.map"
+    "main.css": "/rodrigoAunins/frontpos/static/css/main.016fee05.css",
+    "main.js": "/rodrigoAunins/frontpos/static/js/main.bcd27d46.js",
+    "static/js/239.98dd0108.chunk.js": "/rodrigoAunins/frontpos/static/js/239.98dd0108.chunk.js",
+    "static/js/977.c979323d.chunk.js": "/rodrigoAunins/frontpos/static/js/977.c979323d.chunk.js",
+    "static/js/732.970dbdbb.chunk.js": "/rodrigoAunins/frontpos/static/js/732.970dbdbb.chunk.js",
+    "index.html": "/rodrigoAunins/frontpos/index.html",
+    "main.016fee05.css.map": "/rodrigoAunins/frontpos/static/css/main.016fee05.css.map",
+    "main.bcd27d46.js.map": "/rodrigoAunins/frontpos/static/js/main.bcd27d46.js.map",
+    "239.98dd0108.chunk.js.map": "/rodrigoAunins/frontpos/static/js/239.98dd0108.chunk.js.map",
+    "732.970dbdbb.chunk.js.map": "/rodrigoAunins/frontpos/static/js/732.970dbdbb.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.016fee05.css",
-    "static/js/main.cc6e9bb7.js"
+    "static/js/main.bcd27d46.js"
   ]
 }
