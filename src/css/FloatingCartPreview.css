@@ -1,0 +1,20 @@
+/* Puedes acomodar el estilo que quieras */
+.floating-cart-preview {
+    position: fixed;
+    top: 70px; /* debajo de tu navbar o lo que tengas */
+    right: 10px;
+    width: 300px;
+    max-height: 80vh;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 10px;
+    border-radius: 8px;
+    z-index: 9999;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  }
+  .floating-cart-preview h5 {
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  

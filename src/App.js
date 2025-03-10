@@ -29,33 +29,31 @@ function App() {
   };
 
   return (
--   <BrowserRouter>
-      <Routes>
-        {/* Ruta de Login */}
-        <Route
-          path="/"
-          element={
-            <LoginPage
-              currentUser={currentUser}
-              onLogin={handleLogin}
-              setCurrentSession={setCurrentSession}
-            />
-          }
-        />
-        {/* Dashboard + subrutas */}
-        <Route
-          path="/dashboard/*"
-          element={
-            <Dashboard
-              currentUser={currentUser}
-              currentSession={currentSession}
-              setCurrentSession={setCurrentSession}
-              onLogout={handleLogout}
-            />
-          }
-        />
-      </Routes>
--   </BrowserRouter>
+    <Routes>
+      {/* Ruta de Login */}
+      <Route
+        path="/"
+        element={
+          <LoginPage
+            currentUser={currentUser}
+            onLogin={handleLogin}
+            setCurrentSession={setCurrentSession}
+          />
+        }
+      />
+      {/* Dashboard + subrutas */}
+      <Route
+        path="/dashboard/*"
+        element={
+          <Dashboard
+            currentUser={currentUser}
+            currentSession={currentSession}
+            setCurrentSession={setCurrentSession}
+            onLogout={handleLogout}
+          />
+        }
+      />
+    </Routes>
   );
 }
 

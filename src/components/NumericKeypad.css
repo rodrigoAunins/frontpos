@@ -1,0 +1,29 @@
+/* src/components/NumericKeypad.css */
+
+.numeric-keypad {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 15px;
+  }
+  
+  .nk-row {
+    display: flex;
+    margin-bottom: 5px;
+  }
+  
+  .nk-row button {
+    width: 60px;
+    height: 60px;
+    font-size: 1.4rem;
+    margin: 2px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    background: #f0f0f0;
+    cursor: pointer;
+  }
+  
+  .nk-row button:hover {
+    background: #ddd;
+  }
+  

@@ -1,0 +1,26 @@
+.pinned-cart {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 400px;
+  height: 100vh;
+  background: #fff;
+  border-left: 1px solid #ccc;
+  padding: 10px;
+  overflow-y: auto;
+  z-index: 1000;
+  transition: transform 0.3s ease-in-out;
+}
+
+.pinned-cart.hidden {
+  transform: translateX(100%);
+}
+
+/* Responsividad para pantallas pequeñas */
+@media (max-width: 992px) {
+  .pinned-cart {
+    position: static;
+    width: 100%;
+    height: auto;
+  }
+}

@@ -72,12 +72,11 @@ export async function fetchSales() {
 /******************************************************
  *   Prefetch data con caché local
  ******************************************************/
+// CAMBIO: Se quita la lógica de "if (existing && existing.length>0) return existing;"
+// para que siempre haga fetch y así ver datos nuevos al instante.
 export async function prefetchData(key, fetchFunc, limit=50) {
-  // Si ya existe en caché, devuélvelo
-  const existing = getDataFromCache(key);
-  if (existing && existing.length > 0) return existing;
-
-  // Sino, fetch y almacenar
+  // Antes: si existía algo en caché, lo devolvía sin fetch.
+  // Ahora: forzamos fetch cada vez.
   const data = await fetchFunc(limit);
   storeDataInCache(key, data);
   return data;

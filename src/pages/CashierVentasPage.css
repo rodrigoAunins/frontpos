@@ -1,0 +1,51 @@
+/* Contenedor general */
+.cashier-ventas-wrapper {
+    /* Si quieres que ocupe toda la altura de la pantalla: */
+    min-height: 100vh;
+    position: relative;
+    /* Sin margin-right aquí. El margen lo manejaremos dentro del content-area. */
+  }
+  
+  /* La sección de contenido principal */
+  .content-area {
+    /* Por defecto sin margen, pero para pantallas grandes le daremos margen a la derecha 
+       igual al width del pinned cart para que no se superponga */
+    padding: 1rem;
+    box-sizing: border-box;
+  }
+  
+  /* El carrito */
+  .pinned-cart {
+    /* Por defecto: pinned (fijo) en pantallas grandes */
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 460px; /* Ajusta según tu preferencia */
+    height: 100vh;
+    background: #fff;
+    border-left: 1px solid #ccc;
+    padding: 10px;
+    overflow-y: auto;
+    z-index: 9999;
+    box-sizing: border-box;
+    font-size: 1.1rem;
+  }
+  
+  /* Pantallas chicas (por ejemplo, < 992px) => el carrito deja de ser fijo y se apila */
+  @media (max-width: 992px) {
+    .pinned-cart {
+      position: static; /* Ya no es fijo */
+      width: 100%;
+      height: auto;
+      border-left: none; /* Opcional, si no quieres esa línea cuando está abajo */
+    }
+  }
+  
+  /* También, para pantallas >= 992px, damos margen a .content-area 
+     para que no quede debajo del pinned-cart */
+  @media (min-width: 992px) {
+    .content-area {
+      margin-right: 460px; /* Mismo ancho del pinned-cart */
+    }
+  }
+  

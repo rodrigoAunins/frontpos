@@ -138,3 +138,11 @@ table td {
   border-radius: 10px;
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
 }
+/* Fuerza que aparezca u oculte el menú sin depender de Bootstrap */
+.forceShow {
+  display: block !important;  /* sobrescribe 'collapse' de Bootstrap */
+  width: 100% !important;     /* por si necesitas forzar ancho */
+}
+.forceHide {
+  display: none !important;
+}

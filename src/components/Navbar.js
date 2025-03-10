@@ -1,13 +1,13 @@
-// src/components/Navbar.js
-import React from 'react';
+import React, { useState } from 'react'; // <-- Importa useState
 import { Link, useNavigate } from 'react-router-dom';
 import { storeSessionToLocalStorage } from '../services/api';
 
 export default function Navbar({ currentUser, currentSession, setCurrentSession, onLogout }) {
   const navigate = useNavigate();
+  // Estado local para togglear el menú manualmente
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
-    // Si es cajero y tiene caja abierta
     if (currentUser?.role === "cashier" && currentSession) {
       alert("Debe cerrar la caja antes de salir.");
       return;
@@ -18,20 +18,38 @@ export default function Navbar({ currentUser, currentSession, setCurrentSession,
   };
 
   const handleCameraClick = () => {
-    alert("Función de escaneo con cámara en React: implementa un componente con html5-qrcode.");
+    alert("Función de escaneo con cámara: implementa un componente con html5-qrcode.");
   };
 
   return (
-    <nav className="navbar navbar-expand-lg">
+    <nav className="navbar navbar-expand-lg navbar-dark bg-dark">
       <Link className="navbar-brand" to="/dashboard">
-        <i className="fa-solid fa-makeup-brush"></i> Maquillaje POS
+        <i className="fa-solid fa-makeup-brush"></i> Colormax POS
       </Link>
-      <button className="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav">
-        <span className="navbar-toggler-icon">
+
+      {/* Quitamos data-toggle/data-bs-toggle y usamos onClick */}
+      <button
+        className="navbar-toggler"
+        type="button"
+        onClick={() => setMenuOpen(!menuOpen)}
+        aria-controls="navbarNav"
+        aria-expanded={menuOpen ? 'true' : 'false'}
+        aria-label="Toggle navigation"
+      >
+        {/* Mantén tu ícono FontAwesome en lugar de navbar-toggler-icon */}
+        <span>
           <i className="fa-solid fa-bars"></i>
         </span>
       </button>
-      <div className="collapse navbar-collapse" id="navbarNav">
+
+      {/* 
+        Conservamos "collapse navbar-collapse" para no romper nada,
+        pero añadimos clases extra que forzan abrir/cerrar.
+      */}
+      <div
+        className={`collapse navbar-collapse ${menuOpen ? 'forceShow' : 'forceHide'}`}
+        id="navbarNav"
+      >
         <ul className="navbar-nav mr-auto">
           {currentUser?.role === 'admin' && (
             <>
@@ -58,6 +76,11 @@ export default function Navbar({ currentUser, currentSession, setCurrentSession,
               <li className="nav-item">
                 <Link className="nav-link" to="/dashboard/reportes">
                   <i className="fa-solid fa-chart-line"></i> Reportes
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link className="nav-link" to="/dashboard/admin-excel">
+                  <i className="fa-solid fa-file-excel"></i> Excel Import
                 </Link>
               </li>
             </>

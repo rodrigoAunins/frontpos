@@ -1,0 +1,45 @@
+.payment-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.payment-modal {
+  background: #fff;
+  width: 400px;
+  max-width: 90%;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.payment-modal .modal-header,
+.payment-modal .modal-footer {
+  background: #f2f2f2;
+  padding: 10px;
+}
+
+.payment-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.payment-modal .modal-body {
+  padding: 10px;
+}
+
+/* Responsive: en pantallas pequeñas se ajusta el ancho */
+@media (max-width: 576px) {
+  .payment-modal {
+    width: 95%;
+  }
+}

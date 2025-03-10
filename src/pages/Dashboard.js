@@ -9,6 +9,7 @@ import AdminCategoriesPage from './AdminCategoriesPage';
 import AdminBrandsPage from './AdminBrandsPage';
 import AdminProductsPage from './AdminProductsPage';
 import AdminReportsPage from './AdminReportsPage';
+import AdminExcelUploadPage from './AdminExcelUploadPage';
 
 // Cashier pages
 import CashierCajaPage from './CashierCajaPage';
@@ -45,6 +46,7 @@ export default function Dashboard({
               <Route path="/categorias" element={<AdminCategoriesPage />} />
               <Route path="/marcas" element={<AdminBrandsPage />} />
               <Route path="/productos" element={<AdminProductsPage />} />
+              <Route path="/admin-excel" element={<AdminExcelUploadPage />} />
               <Route path="/reportes" element={<AdminReportsPage />} />
             </>
           )}

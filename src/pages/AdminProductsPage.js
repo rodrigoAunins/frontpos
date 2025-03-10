@@ -1,16 +1,9 @@
-// src/pages/AdminProductsPage.js
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BACKEND_URL, convertToWebp } from '../services/api';
 
 export default function AdminProductsPage() {
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [brands, setBrands] = useState([]);
-
-  const [page, setPage] = useState(0);
-  const PRODUCTS_LIMIT = 10;
-
-  // Para crear un producto nuevo
+  // Estado del formulario de creación
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newPrice, setNewPrice] = useState(0);
@@ -19,68 +12,48 @@ export default function AdminProductsPage() {
   const [newBrandId, setNewBrandId] = useState('');
   const [newBarcode, setNewBarcode] = useState('');
   const [newImageFile, setNewImageFile] = useState(null);
-  const [newVariants, setNewVariants] = useState('');
 
+  // Manejo de variantes
+  const [useVariants, setUseVariants] = useState(false);
+  const [newVariantsText, setNewVariantsText] = useState('');
+
+  // Modal de edición
   const [editProduct, setEditProduct] = useState(null);
 
+  // “Reload Key” para forzar recarga del ProductSearch tras crear/editar/borrar
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // Campos de categorías y marcas (para el formulario)
+  const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
+
+  // Al montar, cargamos las categorías y marcas (para el formulario).
   useEffect(() => {
-    loadData();
-  }, [page]);
+    loadCategoriesAndBrands();
+  }, []);
 
-  const loadData = async () => {
-    await loadProducts();
-    await loadCategories();
-    await loadBrands();
-  };
-
-  const loadProducts = async () => {
+  async function loadCategoriesAndBrands() {
     try {
-      const offset = page * PRODUCTS_LIMIT;
-      const resp = await fetch(`${BACKEND_URL}/products?limit=${PRODUCTS_LIMIT}&offset=${offset}&order=name:asc`);
-      const data = await resp.json();
-      if (data.length === 0 && page > 0) {
-        setPage(page - 1);
-        return;
-      }
-      setProducts(data);
-    } catch (error) {
-      console.error("Error cargando productos:", error);
-    }
-  };
+      // Cargamos categorías
+      const respC = await fetch(`${BACKEND_URL}/categories?limit=99999&offset=0&order=name:asc`);
+      const dataC = await respC.json();
+      setCategories(dataC);
 
-  const loadCategories = async () => {
-    try {
-      const resp = await fetch(`${BACKEND_URL}/categories?limit=99999&offset=0&order=name:asc`);
-      const data = await resp.json();
-      setCategories(data);
-    } catch (error) {
-      console.error("Error cargando categorías:", error);
+      // Cargamos marcas
+      const respB = await fetch(`${BACKEND_URL}/brands?limit=99999&offset=0&order=name:asc`);
+      const dataB = await respB.json();
+      setBrands(dataB);
+    } catch (err) {
+      console.error("Error al cargar categorías/marcas:", err);
     }
-  };
+  }
 
-  const loadBrands = async () => {
-    try {
-      const resp = await fetch(`${BACKEND_URL}/brands?limit=99999&offset=0&order=name:asc`);
-      const data = await resp.json();
-      setBrands(data);
-    } catch (error) {
-      console.error("Error cargando marcas:", error);
-    }
-  };
-
-  const handleCreateProduct = async (e) => {
+  // ------------------- CREAR PRODUCTO -------------------
+  async function handleCreateProduct(e) {
     e.preventDefault();
     if (!newImageFile) {
-      alert("Selecciona una imagen para el producto.");
+      alert("Seleccione una imagen para el producto.");
       return;
-    }
-    const variantsArray = [];
-    if (newVariants.trim()) {
-      const lines = newVariants.split('\n');
-      for (let line of lines) {
-        const [color, variantStock] = line.split('|');
-        variantsArray.push({ color: color?.trim(), stock: parseInt(variantStock || '0') });
-      }
     }
 
     const reader = new FileReader();
@@ -88,22 +61,46 @@ export default function AdminProductsPage() {
       const base64 = ev.target.result;
       try {
         const webpData = await convertToWebp(base64);
-        await fetch(`${BACKEND_URL}/products`, {
+
+        const bodyData = {
+          name: newName,
+          description: newDescription,
+          price: parseFloat(newPrice),
+          categoryId: newCategoryId,
+          brandId: newBrandId,
+          barcode: newBarcode,
+          image: webpData,
+        };
+
+        // Manejo de variantes
+        let variantsArray = [];
+        if (useVariants && newVariantsText.trim()) {
+          const lines = newVariantsText.split('\n');
+          for (let line of lines) {
+            const [color, variantStock] = line.split('|');
+            variantsArray.push({
+              color: color?.trim() || '',
+              stock: parseInt(variantStock || '0'),
+            });
+          }
+        }
+        if (useVariants && variantsArray.length > 0) {
+          bodyData.variants = variantsArray;
+        } else {
+          bodyData.stock = parseInt(newStock);
+        }
+
+        const resp = await fetch(`${BACKEND_URL}/products`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: newName,
-            description: newDescription,
-            price: parseFloat(newPrice),
-            stock: parseInt(newStock),
-            categoryId: newCategoryId,
-            brandId: newBrandId,
-            barcode: newBarcode,
-            image: webpData,
-            variants: variantsArray
-          })
+          body: JSON.stringify(bodyData),
         });
-        // Limpia campos
+        if (!resp.ok) {
+          alert("Error al crear producto");
+          return;
+        }
+
+        // Limpia form
         setNewName('');
         setNewDescription('');
         setNewPrice(0);
@@ -112,246 +109,213 @@ export default function AdminProductsPage() {
         setNewBrandId('');
         setNewBarcode('');
         setNewImageFile(null);
-        setNewVariants('');
-        setPage(0);
-        loadProducts();
+        setUseVariants(false);
+        setNewVariantsText('');
+        setShowCreateForm(false);
+
+        // Forzamos recarga del ProductSearch
+        setReloadKey(prev => prev + 1);
       } catch (error) {
-        console.error("Error creando producto:", error);
+        console.error("Error al crear producto =>", error);
       }
     };
     reader.readAsDataURL(newImageFile);
-  };
+  }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("¿Está seguro de eliminar este producto?")) return;
-    try {
-      await fetch(`${BACKEND_URL}/products/${id}`, { method: 'DELETE' });
-      loadProducts();
-    } catch (error) {
-      console.error("Error eliminando producto:", error);
-    }
-  };
-
-  const handleEditClick = (prod) => {
-    setEditProduct(prod);
-  };
-
-  const handleUpdateProduct = async (updatedProd, file) => {
+  // ------------------- EDITAR PRODUCTO (MODAL) -------------------
+  async function handleUpdateProduct(updated, file) {
     if (file) {
       const reader = new FileReader();
       reader.onload = async (ev) => {
         const base64 = ev.target.result;
         const webpData = await convertToWebp(base64);
-        await fetch(`${BACKEND_URL}/products/${updatedProd.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedProdWithImage(updatedProd, webpData))
-        });
-        setEditProduct(null);
-        loadProducts();
+        updated.image = webpData;
+        await doUpdate(updated);
       };
       reader.readAsDataURL(file);
     } else {
-      await fetch(`${BACKEND_URL}/products/${updatedProd.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedProd)
-      });
-      setEditProduct(null);
-      loadProducts();
+      await doUpdate(updated);
     }
-  };
+  }
+  async function doUpdate(updated) {
+    await fetch(`${BACKEND_URL}/products/${updated.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated)
+    });
+    setEditProduct(null);
+    setReloadKey(prev => prev + 1); // recarga ProductSearch
+  }
 
-  const updatedProdWithImage = (p, webpData) => {
-    return {
-      ...p,
-      image: webpData
-    };
-  };
+  // ------------------- ELIMINAR PRODUCTO (desde ProductSearch) -------------------
+  async function handleDeleteProduct(id) {
+    if (!window.confirm("¿Seguro que desea eliminar el producto?")) return;
+    try {
+      await fetch(`${BACKEND_URL}/products/${id}`, { method: 'DELETE' });
+      // Forzamos recarga
+      setReloadKey(prev => prev + 1);
+    } catch (error) {
+      console.error("Error al eliminar producto:", error);
+    }
+  }
 
   return (
-    <div>
-      <h3><i className="fa-solid fa-boxes-stacked"></i> Gestión de Productos</h3>
+    <div className="container mt-3">
+      <h3>Gestión de Productos</h3>
 
-      {/* Form Crear Producto */}
-      <form onSubmit={handleCreateProduct} className="mb-4">
-        <div className="form-group">
-          <label>Nombre del Producto</label>
-          <input
-            type="text"
-            className="form-control"
-            value={newName}
-            onChange={e => setNewName(e.target.value)}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Descripción</label>
-          <textarea
-            className="form-control"
-            value={newDescription}
-            onChange={e => setNewDescription(e.target.value)}
-          />
-        </div>
-        <div className="form-row">
-          <div className="form-group col-md-3">
-            <label>Precio</label>
-            <input
-              type="number"
-              className="form-control"
-              value={newPrice}
-              onChange={e => setNewPrice(e.target.value)}
-              required
-            />
-          </div>
-          <div className="form-group col-md-3">
-            <label>Stock (sin variantes)</label>
-            <input
-              type="number"
-              className="form-control"
-              value={newStock}
-              onChange={e => setNewStock(e.target.value)}
-              required
-            />
-          </div>
-          <div className="form-group col-md-3">
-            <label>Categoría</label>
-            <select
-              className="form-control"
-              value={newCategoryId}
-              onChange={e => setNewCategoryId(e.target.value)}
-              required
-            >
-              <option value="">Elige...</option>
-              {categories.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group col-md-3">
-            <label>Marca</label>
-            <select
-              className="form-control"
-              value={newBrandId}
-              onChange={e => setNewBrandId(e.target.value)}
-              required
-            >
-              <option value="">Elige...</option>
-              {brands.filter(b => b.categoryId === newCategoryId).map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="form-row">
-          <div className="form-group col-md-6">
-            <label>Código de Barras</label>
-            <input
-              type="text"
-              className="form-control"
-              value={newBarcode}
-              onChange={e => setNewBarcode(e.target.value)}
-            />
-          </div>
-          <div className="form-group col-md-6">
-            <label>Imagen del Producto</label>
-            <input
-              type="file"
-              accept="image/*"
-              className="form-control-file"
-              onChange={e => setNewImageFile(e.target.files[0])}
-              required
-            />
-          </div>
-        </div>
-        <div className="form-group">
-          <label>Variantes (Color|Stock, uno por línea)</label>
-          <textarea
-            className="form-control"
-            placeholder="Ej: Rojo|10&#10;Verde|20"
-            value={newVariants}
-            onChange={e => setNewVariants(e.target.value)}
-          />
-        </div>
-        <button type="submit" className="btn btn-success btn-custom">
-          Agregar Producto
-        </button>
-      </form>
-
-      <h4>Productos</h4>
-      <table className="table table-bordered">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Nombre</th>
-            <th>Categoría</th>
-            <th>Marca</th>
-            <th>Precio</th>
-            <th>Stock</th>
-            <th>Variantes</th>
-            <th>Código de Barras</th>
-            <th>Imagen</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {products.map(prod => {
-            const cat = categories.find(c => c.id === prod.categoryId);
-            const br = brands.find(b => b.id === prod.brandId);
-            const variantsText = prod.variants?.map(v => `${v.color}(${v.stock})`).join(', ') || '';
-            return (
-              <tr key={prod.id}>
-                <td>{prod.id}</td>
-                <td>{prod.name}</td>
-                <td>{cat ? cat.name : ''}</td>
-                <td>{br ? br.name : ''}</td>
-                <td>${prod.price}</td>
-                <td>{prod.stock}</td>
-                <td>{variantsText}</td>
-                <td>{prod.barcode || ''}</td>
-                <td>
-                  {prod.image && (
-                    <img
-                      src={prod.image}
-                      alt={prod.name}
-                      style={{ width: 50, height: 50, objectFit: 'cover' }}
-                    />
-                  )}
-                </td>
-                <td>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={() => handleEditClick(prod)}
-                  >
-                    <i className="fa-solid fa-edit"></i> Editar
-                  </button>
-                  <button
-                    className="btn btn-danger btn-sm"
-                    onClick={() => handleDelete(prod.id)}
-                  >
-                    <i className="fa-solid fa-trash"></i> Eliminar
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <div className="d-flex justify-content-between">
+      {/* Botón para mostrar/ocultar formulario de creación */}
+      <div className="mb-3">
         <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => setPage(Math.max(page-1, 0))}
+          className="btn btn-primary"
+          onClick={() => setShowCreateForm(!showCreateForm)}
         >
-          Anterior
-        </button>
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => setPage(page+1)}
-        >
-          Siguiente
+          {showCreateForm ? 'Cerrar Formulario' : 'Agregar Nuevo Producto'}
         </button>
       </div>
 
+      {/* Formulario de creación */}
+      {showCreateForm && (
+        <form onSubmit={handleCreateProduct} className="card p-3 mb-4">
+          <h5>Nuevo Producto</h5>
+          <div className="form-group">
+            <label>Nombre</label>
+            <input
+              type="text"
+              className="form-control"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Descripción</label>
+            <textarea
+              className="form-control"
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+            />
+          </div>
+
+          <div className="form-row">
+            <div className="form-group col-md-3">
+              <label>Precio</label>
+              <input
+                type="number"
+                className="form-control"
+                value={newPrice}
+                onChange={(e) => setNewPrice(e.target.value)}
+                required
+              />
+            </div>
+            <div className="form-group col-md-3">
+              <label>Stock (sin variantes)</label>
+              <input
+                type="number"
+                className="form-control"
+                value={newStock}
+                disabled={useVariants}
+                onChange={(e) => setNewStock(e.target.value)}
+                required={!useVariants}
+              />
+            </div>
+            <div className="form-group col-md-3">
+              <label>Categoría</label>
+              <select
+                className="form-control"
+                value={newCategoryId}
+                onChange={(e) => setNewCategoryId(e.target.value)}
+                required
+              >
+                <option value="">Seleccionar...</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group col-md-3">
+              <label>Marca</label>
+              <select
+                className="form-control"
+                value={newBrandId}
+                onChange={(e) => setNewBrandId(e.target.value)}
+                required
+              >
+                <option value="">Seleccionar...</option>
+                {brands
+                  .filter((b) => b.categoryId === newCategoryId)
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group col-md-6">
+              <label>Código de Barras</label>
+              <input
+                type="text"
+                className="form-control"
+                value={newBarcode}
+                onChange={(e) => setNewBarcode(e.target.value)}
+              />
+            </div>
+            <div className="form-group col-md-6">
+              <label>Imagen</label>
+              <input
+                type="file"
+                accept="image/*"
+                className="form-control-file"
+                onChange={(e) => setNewImageFile(e.target.files[0])}
+                required
+              />
+            </div>
+          </div>
+
+          {/* Check “usar variantes” */}
+          <div className="form-check mb-2">
+            <input
+              type="checkbox"
+              className="form-check-input"
+              id="useVariantsCheck"
+              checked={useVariants}
+              onChange={(e) => setUseVariants(e.target.checked)}
+            />
+            <label className="form-check-label" htmlFor="useVariantsCheck">
+              ¿Usar variantes (color/talla)?
+            </label>
+          </div>
+          {useVariants && (
+            <div className="form-group">
+              <label>Variantes (Color|Stock, uno por línea)</label>
+              <textarea
+                className="form-control"
+                value={newVariantsText}
+                onChange={(e) => setNewVariantsText(e.target.value)}
+                placeholder="Rojo|10&#10;Verde|20"
+              />
+            </div>
+          )}
+
+          <button type="submit" className="btn btn-success">
+            Guardar
+          </button>
+        </form>
+      )}
+
+      <h4>Productos</h4>
+      {/* ProductSearch: se encarga de listar y buscar productos, con “reloadKey” para recargar */}
+      <ProductSearch
+        reloadKey={reloadKey}
+        onEdit={(prod) => setEditProduct(prod)}
+        onDelete={(id) => handleDeleteProduct(id)}
+      />
+
+      {/* Modal de edición si editProduct no es null */}
       {editProduct && (
         <EditProductModal
           product={editProduct}
@@ -365,6 +329,7 @@ export default function AdminProductsPage() {
   );
 }
 
+/* --------------------- MODAL DE EDICIÓN --------------------- */
 function EditProductModal({ product, categories, brands, onClose, onUpdate }) {
   const [name, setName] = useState(product.name);
   const [description, setDescription] = useState(product.description || '');
@@ -374,50 +339,77 @@ function EditProductModal({ product, categories, brands, onClose, onUpdate }) {
   const [brandId, setBrandId] = useState(product.brandId);
   const [barcode, setBarcode] = useState(product.barcode || '');
   const [file, setFile] = useState(null);
+
+  // parsear variantsJson inicial
+  let initialVariants = [];
+  if (product.variantsJson) {
+    try {
+      initialVariants = JSON.parse(product.variantsJson);
+    } catch {}
+  }
+
+  const [useVariants, setUseVariants] = useState(initialVariants.length > 0);
   const [variantsText, setVariantsText] = useState(() => {
-    if (product.variants && product.variants.length > 0) {
-      return product.variants.map(v => `${v.color}|${v.stock}`).join('\n');
+    if (initialVariants.length > 0) {
+      return initialVariants.map((v) => `${v.color}|${v.stock}`).join('\n');
     }
     return '';
   });
 
-  const handleSubmit = async (e) => {
+  function handleSubmit(e) {
     e.preventDefault();
-    let variants = [];
-    if (variantsText.trim()) {
+
+    let variantsArr = [];
+    if (useVariants && variantsText.trim()) {
       const lines = variantsText.split('\n');
       for (let line of lines) {
         const [color, st] = line.split('|');
-        variants.push({
+        variantsArr.push({
           color: color?.trim() || '',
           stock: parseInt(st || '0')
         });
       }
     }
+
     const updated = {
       ...product,
       name,
       description,
       price: parseFloat(price),
-      stock: parseInt(stock),
       categoryId,
       brandId,
-      barcode,
-      variants
+      barcode
     };
-    await onUpdate(updated, file);
-  };
+
+    if (useVariants && variantsArr.length > 0) {
+      updated.variants = variantsArr;
+    } else {
+      updated.stock = parseInt(stock);
+      updated.variants = [];
+    }
+
+    onUpdate(updated, file);
+  }
 
   return (
-    <div className="modal" style={{ display: 'block', background: 'rgba(0,0,0,0.5)' }}>
+    <div
+      className="modal"
+      style={{
+        display: 'block',
+        background: 'rgba(0,0,0,0.4)',
+      }}
+    >
       <div className="modal-dialog modal-lg">
         <div className="modal-content custom-modal">
           <div className="modal-header">
             <h5 className="modal-title">Editar Producto</h5>
-            <button className="close" onClick={onClose}>×</button>
+            <button className="close" onClick={onClose}>
+              ×
+            </button>
           </div>
           <div className="modal-body">
             <form onSubmit={handleSubmit}>
+              {/* Nombre y Precio */}
               <div className="form-row">
                 <div className="form-group col-md-6">
                   <label>Nombre</label>
@@ -425,7 +417,7 @@ function EditProductModal({ product, categories, brands, onClose, onUpdate }) {
                     type="text"
                     className="form-control"
                     value={name}
-                    onChange={e => setName(e.target.value)}
+                    onChange={(e) => setName(e.target.value)}
                     required
                   />
                 </div>
@@ -435,19 +427,21 @@ function EditProductModal({ product, categories, brands, onClose, onUpdate }) {
                     type="number"
                     className="form-control"
                     value={price}
-                    onChange={e => setPrice(e.target.value)}
+                    onChange={(e) => setPrice(e.target.value)}
                     required
                   />
                 </div>
               </div>
+              {/* Descripción */}
               <div className="form-group">
                 <label>Descripción</label>
                 <textarea
                   className="form-control"
                   value={description}
-                  onChange={e => setDescription(e.target.value)}
+                  onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
+              {/* Stock / Categoría / Marca / Barcode */}
               <div className="form-row">
                 <div className="form-group col-md-3">
                   <label>Stock</label>
@@ -455,8 +449,9 @@ function EditProductModal({ product, categories, brands, onClose, onUpdate }) {
                     type="number"
                     className="form-control"
                     value={stock}
-                    onChange={e => setStock(e.target.value)}
-                    required
+                    disabled={useVariants}
+                    onChange={(e) => setStock(e.target.value)}
+                    required={!useVariants}
                   />
                 </div>
                 <div className="form-group col-md-3">
@@ -464,14 +459,16 @@ function EditProductModal({ product, categories, brands, onClose, onUpdate }) {
                   <select
                     className="form-control"
                     value={categoryId}
-                    onChange={e => {
+                    onChange={(e) => {
                       setCategoryId(e.target.value);
-                      setBrandId('');
+                      setBrandId(''); // resetea marca
                     }}
                     required
                   >
-                    {categories.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -480,13 +477,15 @@ function EditProductModal({ product, categories, brands, onClose, onUpdate }) {
                   <select
                     className="form-control"
                     value={brandId}
-                    onChange={e => setBrandId(e.target.value)}
+                    onChange={(e) => setBrandId(e.target.value)}
                     required
                   >
                     {brands
-                      .filter(b => b.categoryId === categoryId)
-                      .map(b => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
+                      .filter((b) => b.categoryId === categoryId)
+                      .map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
                       ))}
                   </select>
                 </div>
@@ -496,29 +495,48 @@ function EditProductModal({ product, categories, brands, onClose, onUpdate }) {
                     type="text"
                     className="form-control"
                     value={barcode}
-                    onChange={e => setBarcode(e.target.value)}
+                    onChange={(e) => setBarcode(e.target.value)}
                   />
                 </div>
               </div>
-              <div className="form-group">
-                <label>Variantes (Color|Stock, uno por línea)</label>
-                <textarea
-                  className="form-control"
-                  value={variantsText}
-                  onChange={e => setVariantsText(e.target.value)}
+              {/* Checkbox para usar variantes */}
+              <div className="form-check mb-2">
+                <input
+                  type="checkbox"
+                  className="form-check-input"
+                  id="editUseVariantsCheck"
+                  checked={useVariants}
+                  onChange={(e) => setUseVariants(e.target.checked)}
                 />
+                <label
+                  htmlFor="editUseVariantsCheck"
+                  className="form-check-label"
+                >
+                  ¿Usar variantes (color/talla)?
+                </label>
               </div>
+              {useVariants && (
+                <div className="form-group">
+                  <label>Variantes (Color|Stock)</label>
+                  <textarea
+                    className="form-control"
+                    value={variantsText}
+                    onChange={(e) => setVariantsText(e.target.value)}
+                  />
+                </div>
+              )}
+              {/* Imagen (opcional) */}
               <div className="form-group">
                 <label>Imagen</label>
                 <input
                   type="file"
                   accept="image/*"
                   className="form-control-file"
-                  onChange={e => setFile(e.target.files[0])}
+                  onChange={(e) => setFile(e.target.files[0])}
                 />
               </div>
               {product.image && (
-                <div id="currentProductImage" className="text-center mb-2">
+                <div className="text-center mb-2">
                   <img
                     src={product.image}
                     alt={product.name}
@@ -526,19 +544,142 @@ function EditProductModal({ product, categories, brands, onClose, onUpdate }) {
                   />
                 </div>
               )}
-              <button type="submit" className="btn btn-success btn-custom">
-                Actualizar
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-custom"
-                onClick={onClose}
-              >
-                Cancelar
-              </button>
+              {/* Botones footer */}
+              <div className="modal-footer">
+                <button type="submit" className="btn btn-success">
+                  Actualizar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={onClose}
+                >
+                  Cancelar
+                </button>
+              </div>
             </form>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------
+   Componente Reutilizable: ProductSearch (para listar y buscar productos)
+   ------------------------------------------------------------------ */
+function ProductSearch({
+  reloadKey = 0,     // Si cambia, forzamos recarga
+  limit = 10,       // Cuántos productos por página
+  onEdit,           // Callback para editar
+  onDelete,         // Callback para eliminar
+}) {
+  const [page, setPage] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [products, setProducts] = useState([]);
+
+  // Cada vez que cambie "page" o "searchTerm" o "reloadKey", recargamos
+  useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchTerm, reloadKey]);
+
+  async function loadData() {
+    try {
+      const offset = page * limit;
+      let url = `${BACKEND_URL}/products?limit=${limit}&offset=${offset}&order=name:asc`;
+      if (searchTerm.trim()) {
+        url += `&searchTerm=${encodeURIComponent(searchTerm.trim())}`;
+      }
+
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.length === 0 && page > 0) {
+        setPage(Math.max(0, page - 1));
+        return;
+      }
+      setProducts(data);
+    } catch (error) {
+      console.error("Error en ProductSearch loadData:", error);
+    }
+  }
+
+  function handleEditClick(prod) {
+    if (onEdit) onEdit(prod);
+  }
+  function handleDeleteClick(id) {
+    if (onDelete) onDelete(id);
+  }
+
+  return (
+    <div style={{ border: '1px solid #ccc', padding: '10px', borderRadius: '6px' }}>
+      <h5>Listado / Búsqueda de Productos</h5>
+      {/* Buscador local => server side => searchTerm en la query */}
+      <div className="form-group mb-2">
+        <input
+          type="text"
+          className="form-control"
+          placeholder="Buscar en el servidor..."
+          value={searchTerm}
+          onChange={(e) => {
+            setPage(0);
+            setSearchTerm(e.target.value);
+          }}
+        />
+      </div>
+
+      <table className="table table-bordered table-sm">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Precio</th>
+            <th>Stock</th>
+            <th>Código</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {products.map((p) => {
+            return (
+              <tr key={p.id}>
+                <td>{p.name}</td>
+                <td>${p.price}</td>
+                <td>{p.stock}</td>
+                <td>{p.barcode}</td>
+                <td>
+                  <button
+                    className="btn btn-primary btn-sm mr-1"
+                    onClick={() => handleEditClick(p)}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={() => handleDeleteClick(p.id)}
+                  >
+                    Eliminar
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {/* Paginación local del ProductSearch */}
+      <div className="d-flex justify-content-between">
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => setPage(Math.max(0, page - 1))}
+        >
+          Anterior
+        </button>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => setPage(page + 1)}
+        >
+          Siguiente
+        </button>
       </div>
     </div>
   );

@@ -1,0 +1,16 @@
+/* numeric-keypad.css (o en tu global) */
+.numeric-keypad {
+    margin-top: 10px;
+  }
+  .numeric-keypad .key-row {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 5px;
+  }
+  .numeric-keypad button {
+    width: 60px;
+    height: 60px;
+    font-size: 1.2rem;
+    margin: 2px;
+  }
+  
