@@ -47,10 +47,13 @@ export default function AdminReportPage() {
       // Cargar ventas filtradas por fecha y cajero
       const respSales = await fetch(`${BACKEND_URL}/sales?limit=99999&offset=0&order=date:asc`);
       let sales = await respSales.json();
+      // Filtrar por fecha
       sales = sales.filter(sale => sale.date.slice(0, 10) === reportDate);
+      // Filtrar por cajero si no es "all"
       if (cashierFilter !== "all") {
         sales = sales.filter(sale => String(sale.cashierId) === String(cashierFilter));
       }
+
       // Cargar usuarios para obtener nombre del cajero
       const respUsers = await fetch(`${BACKEND_URL}/users?limit=99999&offset=0&order=username:asc`);
       const users = await respUsers.json();
@@ -63,13 +66,23 @@ export default function AdminReportPage() {
         brandMap[b.id] = b.name;
       });
 
+      // Dividir ventas: activas (no canceladas) y canceladas
+      const activeSales = sales.filter(s => !s.isCancelled);
+      const cancelledSales = sales.filter(s => s.isCancelled);
+
       const productCache = {};
       let totalDaySales = 0;
       let totalStockUsed = 0;
-      let html = `<div class="report-section" style="padding:1rem; border:1px solid #ccc; border-radius:8px; margin-bottom:1rem;">
-                    <h4>Reporte de Ventas ${cashierFilter === "all" ? "Totales" : "del Cajero"}</h4>`;
-      if (sales.length === 0) {
-        html += `<p>No hay ventas en esta fecha.</p>`;
+
+      // ---- HTML final ----
+      let html = `<div class="report-section" style="padding:1rem; border:1px solid #ccc; border-radius:8px; margin-bottom:1rem;">`;
+
+      // ~~~~~~~~~~~~~~~~~~~~~~~
+      // 1) Ventas NO canceladas
+      // ~~~~~~~~~~~~~~~~~~~~~~~
+      html += `<h4>Ventas Activas (No Canceladas)</h4>`;
+      if (activeSales.length === 0) {
+        html += `<p>No hay ventas activas en esta fecha.</p>`;
       } else {
         html += `<table class="table table-bordered" style="width:100%;">
           <thead>
@@ -83,19 +96,19 @@ export default function AdminReportPage() {
             </tr>
           </thead>
           <tbody>`;
-        // Recorrer cada venta
-        for (const sale of sales) {
+
+        for (const sale of activeSales) {
           totalDaySales += sale.total || 0;
-          // Comparar ids como string para evitar problemas de tipo
           const cashier = users.find(u => String(u.id) === String(sale.cashierId));
           const cashierName = cashier ? cashier.username : "Desconocido";
+
           if (sale.items && sale.items.length > 0) {
-            // Cada item de la venta en una fila
+            // Cada item en una fila
             for (const item of sale.items) {
               totalStockUsed += item.quantity;
               const prod = await getProductDetail(item.productId, productCache);
-              // Obtener la marca a partir del brandId del producto
               const brandName = prod && prod.brandId ? (brandMap[prod.brandId] || "N/A") : "N/A";
+
               html += `<tr>
                          <td>${sale.id || "(sin ID)"}</td>
                          <td>${new Date(sale.date).toLocaleTimeString()}</td>
@@ -107,19 +120,67 @@ export default function AdminReportPage() {
             }
           }
         }
+
         html += `</tbody></table>`;
-        html += `<p><strong>Total del Día:</strong> $${totalDaySales.toFixed(2)}</p>`;
-        html += `<p><strong>Total de Stock Consumido:</strong> ${totalStockUsed} unidades</p>`;
+        html += `<p><strong>Total del Día (Ventas Activas):</strong> $${totalDaySales.toFixed(2)}</p>`;
+        html += `<p><strong>Total de Stock Consumido (Ventas Activas):</strong> ${totalStockUsed} unidades</p>`;
       }
+
+      // ~~~~~~~~~~~~~~~~~~~~~~~
+      // 2) Ventas CANCELADAS
+      // ~~~~~~~~~~~~~~~~~~~~~~~
+      html += `<hr /><h4>Ventas Canceladas</h4>`;
+      if (cancelledSales.length === 0) {
+        html += `<p>No hay ventas canceladas en esta fecha.</p>`;
+      } else {
+        html += `<table class="table table-bordered" style="width:100%;">
+          <thead>
+            <tr>
+              <th>Ticket</th>
+              <th>Hora</th>
+              <th>Cajero</th>
+              <th>Marca</th>
+              <th>Nombre del Producto</th>
+              <th>Cantidad</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+        for (const sale of cancelledSales) {
+          const cashier = users.find(u => String(u.id) === String(sale.cashierId));
+          const cashierName = cashier ? cashier.username : "Desconocido";
+
+          if (sale.items && sale.items.length > 0) {
+            for (const item of sale.items) {
+              const prod = await getProductDetail(item.productId, productCache);
+              const brandName = prod && prod.brandId ? (brandMap[prod.brandId] || "N/A") : "N/A";
+
+              html += `<tr>
+                         <td>${sale.id || "(sin ID)"}</td>
+                         <td>${new Date(sale.date).toLocaleTimeString()}</td>
+                         <td>${cashierName}</td>
+                         <td>${brandName}</td>
+                         <td>${item.productName}</td>
+                         <td>${item.quantity}</td>
+                       </tr>`;
+            }
+          }
+        }
+
+        html += `</tbody></table>`;
+      }
+
+      // Cierro el container del reporte
       html += `</div>`;
       setSalesReportContent(html);
+
     } catch (error) {
       console.error("Error generando reporte de ventas:", error);
       setSalesReportContent("<div class='text-danger'>Error generando reporte de ventas.</div>");
     }
   }
 
-  // Función para exportar el reporte de ventas a Excel
+  // Función para exportar el reporte de ventas a Excel (solo NO canceladas)
   async function exportSalesReportToExcel() {
     if (!reportDate) {
       alert("Seleccione una fecha");
@@ -129,10 +190,16 @@ export default function AdminReportPage() {
       // Cargar ventas filtradas
       const respSales = await fetch(`${BACKEND_URL}/sales?limit=99999&offset=0&order=date:asc`);
       let sales = await respSales.json();
+      // Filtrar por fecha
       sales = sales.filter(sale => sale.date.slice(0, 10) === reportDate);
+      // Filtrar por cajero si no es "all"
       if (cashierFilter !== "all") {
         sales = sales.filter(sale => String(sale.cashierId) === String(cashierFilter));
       }
+
+      // Quedarnos solo con las NO canceladas
+      const activeSales = sales.filter(s => !s.isCancelled);
+
       // Cargar usuarios
       const respUsers = await fetch(`${BACKEND_URL}/users?limit=99999&offset=0&order=username:asc`);
       const users = await respUsers.json();
@@ -147,9 +214,11 @@ export default function AdminReportPage() {
       const productCache = {};
       const ventasData = [];
       ventasData.push(["Ticket", "Hora", "Cajero", "Marca", "Nombre del Producto", "Cantidad"]);
-      for (const sale of sales) {
+
+      for (const sale of activeSales) {
         const cashier = users.find(u => String(u.id) === String(sale.cashierId));
         const cashierName = cashier ? cashier.username : "Desconocido";
+
         if (sale.items && sale.items.length > 0) {
           for (const item of sale.items) {
             const prod = await getProductDetail(item.productId, productCache);
@@ -165,9 +234,10 @@ export default function AdminReportPage() {
           }
         }
       }
+
       const ws = XLSX.utils.aoa_to_sheet(ventasData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Ventas");
+      XLSX.utils.book_append_sheet(wb, ws, "VentasActivas");
       const filename = `ReporteVentas_${reportDate}_${cashierFilter === "all" ? "Todos" : cashierFilter}.xlsx`;
       XLSX.writeFile(wb, filename);
     } catch (error) {
